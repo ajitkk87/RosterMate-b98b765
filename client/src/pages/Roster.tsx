@@ -3,7 +3,7 @@ import { Loader2, RefreshCw } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { useToast } from '@/hooks/useToast';
-import { useAuth } from '@/contexts/AuthContext';
+import { getMockUser } from '@/api/mockUser';
 import { getRosterByWeek, generateRoster, reassignDuty } from '@/api/roster';
 import { WeeklyRoster } from '@/types/roster';
 import { format, startOfWeek } from 'date-fns';
@@ -20,7 +20,7 @@ export function Roster() {
   const [reassignDialogOpen, setReassignDialogOpen] = useState(false);
   const [selectedAssignment, setSelectedAssignment] = useState<DutyAssignment | null>(null);
   const { toast } = useToast();
-  const { user } = useAuth();
+  const user = getMockUser();
 
   const isAdmin = user?.role === 'admin';
 

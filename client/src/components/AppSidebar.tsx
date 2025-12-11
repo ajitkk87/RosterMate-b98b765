@@ -14,12 +14,12 @@ import {
   SidebarMenuSubButton,
 } from '@/components/ui/sidebar';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { useAuth } from '@/contexts/AuthContext';
+import { getMockUser } from '@/api/mockUser';
 
 export function AppSidebar() {
   const navigate = useNavigate();
   const location = useLocation();
-  const { user } = useAuth();
+  const user = getMockUser();
 
   const isAdmin = user?.role === 'admin';
 
@@ -37,22 +37,18 @@ export function AppSidebar() {
         { title: 'Roster History', path: '/roster/history' },
       ],
     },
-    ...(isAdmin
-      ? [
-          {
-            title: 'Employees',
-            icon: Users,
-            path: '/employees',
-          },
-        ]
-      : []),
+    {
+      title: 'Employees',
+      icon: Users,
+      path: '/employees',
+    },
     {
       title: 'Holidays',
       icon: Umbrella,
       items: [
         { title: isAdmin ? 'All Holidays' : 'My Holidays', path: '/holidays' },
         { title: 'Request Holiday', path: '/holidays/request' },
-        ...(isAdmin ? [{ title: 'Pending Requests', path: '/holidays/pending' }] : []),
+        { title: 'Pending Requests', path: '/holidays/pending' },
       ],
     },
     {

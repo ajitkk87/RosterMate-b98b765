@@ -4,7 +4,7 @@ import { Calendar, Users, Umbrella, AlertCircle, Plus } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { useAuth } from '@/contexts/AuthContext';
+import { getMockUser } from '@/api/mockUser';
 import { useToast } from '@/hooks/useToast';
 import { getRosterByWeek } from '@/api/roster';
 import { getHolidays, getMyHolidays } from '@/api/holidays';
@@ -14,7 +14,7 @@ import { Holiday } from '@/types/holiday';
 import { DutyCard } from '@/components/DutyCard';
 
 export function Dashboard() {
-  const { user } = useAuth();
+  const user = getMockUser();
   const navigate = useNavigate();
   const { toast } = useToast();
   const [currentRoster, setCurrentRoster] = useState<WeeklyRoster | null>(null);

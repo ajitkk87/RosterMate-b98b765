@@ -1,10 +1,10 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { useAuth } from '@/contexts/AuthContext';
+import { getMockUser } from '@/api/mockUser';
 import { Mail, User, Shield } from 'lucide-react';
 
 export function Profile() {
-  const { user } = useAuth();
+  const user = getMockUser();
 
   return (
     <div className="space-y-6">

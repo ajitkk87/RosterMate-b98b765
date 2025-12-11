@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/hooks/useToast';
-import { useAuth } from '@/contexts/AuthContext';
+import { getMockUser } from '@/api/mockUser';
 import { getHolidays, getMyHolidays } from '@/api/holidays';
 import { Holiday, HolidayStatus } from '@/types/holiday';
 import { format } from 'date-fns';
@@ -15,7 +15,7 @@ export function Holidays() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<HolidayStatus | 'all'>('all');
   const { toast } = useToast();
-  const { user } = useAuth();
+  const user = getMockUser();
 
   const isAdmin = user?.role === 'admin';
 

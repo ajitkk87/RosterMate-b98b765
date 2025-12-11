@@ -11,7 +11,9 @@
     "build": "npm run build:shared && tsc",
     "build:shared": "cd ../shared && npm run build",
     "lint": "eslint .",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "seed": "tsx scripts/seedDatabase.ts",
+    "clean": "tsx scripts/cleanDatabase.ts"
   },
   "keywords": [],
   "author": "",

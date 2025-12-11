@@ -3,6 +3,9 @@ import express from 'express';
 import { Request, Response } from 'express';
 import basicRoutes from './routes/index';
 import authRoutes from './routes/authRoutes';
+import employeeRoutes from './routes/employeeRoutes';
+import holidayRoutes from './routes/holidayRoutes';
+import rosterRoutes from './routes/rosterRoutes';
 import { connectDB } from './config/database';
 import cors from 'cors';
 
@@ -38,6 +41,12 @@ app.on("error", (error: Error) => {
 app.use(basicRoutes);
 // Authentication Routes
 app.use('/api/auth', authRoutes);
+// Employee Routes
+app.use('/api/employees', employeeRoutes);
+// Holiday Routes
+app.use('/api/holidays', holidayRoutes);
+// Roster Routes
+app.use('/api/roster', rosterRoutes);
 
 // If no routes handled the request, it's a 404
 app.use((req: Request, res: Response) => {

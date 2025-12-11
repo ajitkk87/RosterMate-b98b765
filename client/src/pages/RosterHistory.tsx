@@ -23,27 +23,29 @@ export function RosterHistory() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadRosterHistory();
-  }, []);
-
   const loadRosterHistory = async () => {
     try {
       setLoading(true);
       console.log('Loading roster history');
       const { rosters: data } = await getRosterHistory();
       setRosters(data);
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error loading roster history:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadRosterHistory();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const handleViewDetails = (roster: WeeklyRoster) => {
     setSelectedRoster(roster);

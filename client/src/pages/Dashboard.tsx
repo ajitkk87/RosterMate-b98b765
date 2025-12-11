@@ -24,10 +24,6 @@ export function Dashboard() {
 
   const isAdmin = user?.role === 'admin';
 
-  useEffect(() => {
-    loadDashboardData();
-  }, []);
-
   const loadDashboardData = async () => {
     try {
       setLoading(true);
@@ -43,17 +39,23 @@ export function Dashboard() {
         setHolidays(myHolidaysResponse.holidays);
         setHolidayBalance(myHolidaysResponse.balance);
       }
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error loading dashboard data:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadDashboardData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const myNextDuty = currentRoster?.assignments.find(
     (a) => a.employee._id === user?._id || a.employee.email === user?.email

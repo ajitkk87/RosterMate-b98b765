@@ -35,12 +35,6 @@ export function ReassignDialog({ open, onOpenChange, assignment, onReassign }: R
   const [loading, setLoading] = useState(false);
   const { toast } = useToast();
 
-  useEffect(() => {
-    if (open && assignment) {
-      loadAvailableEmployees();
-    }
-  }, [open, assignment]);
-
   const loadAvailableEmployees = async () => {
     try {
       setLoading(true);
@@ -52,16 +46,24 @@ export function ReassignDialog({ open, onOpenChange, assignment, onReassign }: R
           emp.status === 'Available'
       );
       setAvailableEmployees(filtered);
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    if (open && assignment) {
+      loadAvailableEmployees();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, assignment]);
 
   const handleReassign = () => {
     if (assignment && selectedEmployeeId) {

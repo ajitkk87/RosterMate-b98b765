@@ -81,11 +81,12 @@ export function EmployeeDialog({ open, onOpenChange, employee, onSuccess }: Empl
         });
       }
       onSuccess();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error saving employee:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     }

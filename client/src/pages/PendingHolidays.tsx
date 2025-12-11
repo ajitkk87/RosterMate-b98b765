@@ -15,21 +15,18 @@ export function PendingHolidays() {
   const [activeTab, setActiveTab] = useState<HolidayStatus | 'all'>('Pending');
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadHolidays();
-  }, []);
-
   const loadHolidays = async () => {
     try {
       setLoading(true);
       console.log('Loading all holidays for admin');
       const { holidays: data } = await getHolidays();
       setHolidays(data);
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error loading holidays:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -46,11 +43,12 @@ export function PendingHolidays() {
         description: 'Holiday request approved',
       });
       loadHolidays();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error approving holiday:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     }
@@ -65,15 +63,21 @@ export function PendingHolidays() {
         description: 'Holiday request rejected',
       });
       loadHolidays();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error rejecting holiday:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     }
   };
+
+  useEffect(() => {
+    loadHolidays();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getStatusBadge = (status: HolidayStatus) => {
     const variants: Record<HolidayStatus, string> = {

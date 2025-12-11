@@ -24,10 +24,6 @@ export function Roster() {
 
   const isAdmin = user?.role === 'admin';
 
-  useEffect(() => {
-    loadRoster();
-  }, [currentWeek]);
-
   const loadRoster = async () => {
     try {
       setLoading(true);
@@ -35,11 +31,12 @@ export function Roster() {
       console.log('Loading roster for week:', weekStart);
       const { roster: data } = await getRosterByWeek(weekStart);
       setRoster(data);
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error loading roster:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -58,17 +55,23 @@ export function Roster() {
         title: 'Success',
         description: message,
       });
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error generating roster:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setGenerating(false);
     }
   };
+
+  useEffect(() => {
+    loadRoster();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentWeek]);
 
   const handleReassignClick = (assignmentId: string) => {
     const assignment = roster?.assignments.find((a) => a._id === assignmentId);
@@ -87,11 +90,12 @@ export function Roster() {
         description: 'Duty reassigned successfully',
       });
       loadRoster();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error reassigning duty:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     }

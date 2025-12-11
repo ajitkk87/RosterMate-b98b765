@@ -46,25 +46,18 @@ export function Employees() {
   const [employeeToDelete, setEmployeeToDelete] = useState<Employee | null>(null);
   const { toast } = useToast();
 
-  useEffect(() => {
-    loadEmployees();
-  }, []);
-
-  useEffect(() => {
-    filterEmployees();
-  }, [employees, searchQuery, departmentFilter]);
-
   const loadEmployees = async () => {
     try {
       setLoading(true);
       const { employees: data } = await getEmployees();
       console.log('Loaded employees:', data.length);
       setEmployees(data);
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error loading employees:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
@@ -91,6 +84,16 @@ export function Employees() {
     setFilteredEmployees(filtered);
   };
 
+  useEffect(() => {
+    loadEmployees();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    filterEmployees();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [employees, searchQuery, departmentFilter]);
+
   const handleAddEmployee = () => {
     setSelectedEmployee(null);
     setDialogOpen(true);
@@ -116,11 +119,12 @@ export function Employees() {
         description: 'Employee deleted successfully',
       });
       loadEmployees();
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error deleting employee:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {

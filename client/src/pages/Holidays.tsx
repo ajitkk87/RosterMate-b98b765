@@ -19,10 +19,6 @@ export function Holidays() {
 
   const isAdmin = user?.role === 'admin';
 
-  useEffect(() => {
-    loadHolidays();
-  }, []);
-
   const loadHolidays = async () => {
     try {
       setLoading(true);
@@ -35,17 +31,23 @@ export function Holidays() {
         setHolidays(data);
         setHolidayBalance(balance);
       }
-    } catch (error: any) {
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'An error occurred';
       console.error('Error loading holidays:', error);
       toast({
         title: 'Error',
-        description: error.message,
+        description: errorMessage,
         variant: 'destructive',
       });
     } finally {
       setLoading(false);
     }
   };
+
+  useEffect(() => {
+    loadHolidays();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const getStatusBadge = (status: HolidayStatus) => {
     const variants: Record<HolidayStatus, string> = {

@@ -1,5 +1,5 @@
 import api from './api';
-import { WeeklyRoster } from '@/types/roster';
+import { WeeklyRoster, DutyAssignment } from '@/types/roster';
 
 // Description: Get roster for a specific week
 // Endpoint: GET /api/roster?weekStart=YYYY-MM-DD
@@ -125,10 +125,10 @@ export const generateRoster = async (weekStart: string) => {
 // Description: Reassign duty
 // Endpoint: PUT /api/roster/reassign/:assignmentId
 // Request: { employeeId: string }
-// Response: { assignment: any, message: string }
+// Response: { assignment: DutyAssignment, message: string }
 export const reassignDuty = async (assignmentId: string, employeeId: string) => {
   // Mocking the response
-  return new Promise<{ assignment: any; message: string }>((resolve) => {
+  return new Promise<{ assignment: DutyAssignment; message: string }>((resolve) => {
     setTimeout(() => {
       resolve({
         assignment: {

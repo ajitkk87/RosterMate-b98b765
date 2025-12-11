@@ -1,19 +1,22 @@
-import { Outlet } from "react-router-dom"
-import { Header } from "./Header"
-import { Footer } from "./Footer"
+import { Outlet } from 'react-router-dom';
+import { SidebarProvider, SidebarInset } from '@/components/ui/sidebar';
+import { AppSidebar } from '@/components/AppSidebar';
+import { Header } from './Header';
 
 export function Layout() {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background to-secondary">
-      <Header />
-      <div className="flex h-[calc(100vh-4rem)] pt-16">
-        <main className="flex-1 overflow-y-auto p-6">
-          <div className="mx-auto max-w-7xl">
-            <Outlet />
-          </div>
-        </main>
+    <SidebarProvider>
+      <div className="flex min-h-screen w-full">
+        <AppSidebar />
+        <SidebarInset className="flex-1">
+          <Header />
+          <main className="flex-1 overflow-y-auto p-6 pt-20">
+            <div className="mx-auto max-w-7xl">
+              <Outlet />
+            </div>
+          </main>
+        </SidebarInset>
       </div>
-      <Footer />
-    </div>
-  )
+    </SidebarProvider>
+  );
 }

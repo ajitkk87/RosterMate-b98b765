@@ -18,7 +18,7 @@ class UserService {
 
   static async get(id: string): Promise<IUser | null> {
     try {
-      return await User.findOne({ _id: id }).exec();
+      return await User.findById(id);
     } catch (err) {
       throw new Error(`Database error while getting the user by their ID: ${err}`);
     }
@@ -26,7 +26,7 @@ class UserService {
 
   static async getByEmail(email: string): Promise<IUser | null> {
     try {
-      return await User.findOne({ email }).exec();
+      return await User.findByEmail(email);
     } catch (err) {
       throw new Error(`Database error while getting the user by their email: ${err}`);
     }
@@ -34,7 +34,7 @@ class UserService {
 
   static async update(id: string, data: Partial<IUser>): Promise<IUser | null> {
     try {
-      return await User.findOneAndUpdate({ _id: id }, data, { new: true, upsert: false });
+      return await User.updateOne(id, data as any);
     } catch (err) {
       throw new Error(`Database error while updating user ${id}: ${err}`);
     }
@@ -42,8 +42,7 @@ class UserService {
 
   static async delete(id: string): Promise<boolean> {
     try {
-      const result = await User.deleteOne({ _id: id }).exec();
-      return (result.deletedCount === 1);
+      return await User.deleteOne(id as any);
     } catch (err) {
       throw new Error(`Database error while deleting user ${id}: ${err}`);
     }
@@ -54,7 +53,7 @@ class UserService {
     if (!password) throw new Error('Password is required');
 
     try {
-      const user = await User.findOne({email}).exec();
+      const user = await User.findByEmail(email);
       if (!user) return null;
 
       if (!user.password) {
@@ -64,9 +63,9 @@ class UserService {
       const passwordValid = await validatePassword(password, user.password);
       if (!passwordValid) return null;
 
-      user.lastLoginAt = new Date(Date.now());
-      const updatedUser = await user.save();
-      return updatedUser;
+      // update last login timestamp
+      await User.updateOne(user._id as string, { lastLoginAt: new Date().toISOString() } as any);
+      return await User.findById(user._id as string);
     } catch (err) {
       if (err instanceof Error && err.message.startsWith('This account uses')) {
         throw err;
@@ -85,14 +84,8 @@ class UserService {
     const hash = await generatePasswordHash(password);
 
     try {
-      const user = new User({
-        email,
-        password: hash,
-        name,
-      });
-
-      await user.save();
-      return user;
+      const created = await User.create({ email, password: hash, name, isActive: true, role: ROLES.USER } as any);
+      return created as IUser;
     } catch (err) {
       throw new Error(`Database error while creating new user: ${err}`);
     }
@@ -100,14 +93,10 @@ class UserService {
 
   static async setPassword(user: IUser, password: string): Promise<IUser> {
     if (!password) throw new Error('Password is required');
-    user.password = await generatePasswordHash(password);
-
+    const hash = await generatePasswordHash(password);
     try {
-      if (!user.isNew) {
-        await user.save();
-      }
-
-      return user;
+      await User.updateOne(user._id as string, { password: hash } as any);
+      return (await User.findById(user._id as string)) as IUser;
     } catch (err) {
       throw new Error(`Database error while setting user password: ${err}`);
     }

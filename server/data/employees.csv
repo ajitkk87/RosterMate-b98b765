@@ -1,0 +1,3 @@
+_id,name,email,department,employeeId,status,createdAt,updatedAt
+9f4739cc-6297-4b3d-8300-8a6a9bed5d9f,John Smith,john.smith@company.com,Developer,DEV001,Available,2025-12-11T20:04:08.219Z,2025-12-11T20:04:08.219Z
+7e14e4f7-8905-4543-93e2-2624999a489a,Maria Perez,maria.p@company.com,Platform,PLT005,Available,2025-12-11T20:04:08.256Z,2025-12-11T20:04:08.256Z

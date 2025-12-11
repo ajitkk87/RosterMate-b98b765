@@ -1,20 +1,20 @@
 import Employee, { IEmployee, Department } from '../models/Employee';
-import mongoose from 'mongoose';
 
 class EmployeeService {
   /**
    * Get all employees, optionally filtered by department
    */
   async getAllEmployees(department?: Department): Promise<IEmployee[]> {
-    const filter = department ? { department } : {};
-    return await Employee.find(filter).sort({ employeeId: 1 });
+    const filter = department ? { department } : undefined;
+    const employees = await Employee.find(filter);
+    return employees.sort((a, b) => (a.employeeId || '').localeCompare(b.employeeId || ''));
   }
 
   /**
    * Get employee by ID
    */
   async getEmployeeById(id: string): Promise<IEmployee | null> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id) {
       throw new Error('Invalid employee ID format');
     }
     return await Employee.findById(id);
@@ -29,21 +29,18 @@ class EmployeeService {
     department: Department;
   }): Promise<IEmployee> {
     // Check if email already exists
-    const existingEmployee = await Employee.findOne({ email: data.email.toLowerCase() });
+    const existingEmployee = await Employee.findByEmail(data.email.toLowerCase());
     if (existingEmployee) {
       throw new Error('Employee with this email already exists');
     }
 
-    // Generate employee ID based on department
     const employeeId = await this.generateEmployeeId(data.department);
 
-    const employee = new Employee({
+    return await Employee.create({
       ...data,
       employeeId,
       status: 'Available',
     });
-
-    return await employee.save();
   }
 
   /**
@@ -57,82 +54,66 @@ class EmployeeService {
       department?: Department;
     }
   ): Promise<IEmployee | null> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id) {
       throw new Error('Invalid employee ID format');
     }
 
-    // If email is being updated, check for duplicates
     if (data.email) {
-      const existingEmployee = await Employee.findOne({
-        email: data.email.toLowerCase(),
-        _id: { $ne: id },
-      });
-      if (existingEmployee) {
+      const all = await Employee.find({});
+      const existing = all.find(e => e.email === data.email?.toLowerCase() && e._id !== id);
+      if (existing) {
         throw new Error('Employee with this email already exists');
       }
     }
 
-    const employee = await Employee.findByIdAndUpdate(
-      id,
-      { $set: data },
-      { new: true, runValidators: true }
-    );
-
-    return employee;
+    return await Employee.updateOne(id, data as any);
   }
 
   /**
    * Delete an employee
    */
   async deleteEmployee(id: string): Promise<boolean> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id) {
       throw new Error('Invalid employee ID format');
     }
 
-    const result = await Employee.findByIdAndDelete(id);
-    return result !== null;
+    return await Employee.deleteOne(id);
   }
 
   /**
    * Update employee status
    */
   async updateEmployeeStatus(id: string, status: 'Available' | 'On Holiday' | 'On Duty'): Promise<IEmployee | null> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id) {
       throw new Error('Invalid employee ID format');
     }
 
-    return await Employee.findByIdAndUpdate(
-      id,
-      { $set: { status } },
-      { new: true }
-    );
+    return await Employee.updateOne(id, { status } as any);
   }
 
   /**
    * Get available employees by department (not on holiday or duty)
    */
   async getAvailableEmployees(department: Department, excludeIds: string[] = []): Promise<IEmployee[]> {
-    const filter: Record<string, unknown> = {
-      department,
-      status: 'Available',
-    };
-
-    if (excludeIds.length > 0) {
-      filter._id = { $nin: excludeIds.map(id => new mongoose.Types.ObjectId(id)) };
-    }
-
-    return await Employee.find(filter).sort({ lastDutyDate: 1, employeeId: 1 });
+    const all = await Employee.find({ department, status: 'Available' });
+    const filtered = all.filter(e => !excludeIds.includes(e._id || ''));
+    return filtered.sort((a, b) => {
+      const aDate = a.lastDutyDate || '';
+      const bDate = b.lastDutyDate || '';
+      if (aDate === bDate) return (a.employeeId || '').localeCompare(b.employeeId || '');
+      return aDate.localeCompare(bDate);
+    });
   }
 
   /**
    * Update last duty date for an employee
    */
   async updateLastDutyDate(id: string, date: Date): Promise<void> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
+    if (!id) {
       throw new Error('Invalid employee ID format');
     }
 
-    await Employee.findByIdAndUpdate(id, { $set: { lastDutyDate: date } });
+    await Employee.updateOne(id, { lastDutyDate: date.toISOString() } as any);
   }
 
   /**
@@ -153,13 +134,14 @@ class EmployeeService {
     }
 
     // Find the highest existing ID for this department
-    const lastEmployee = await Employee.findOne({ employeeId: new RegExp(`^${prefix}`) })
-      .sort({ employeeId: -1 })
-      .limit(1);
+    const all = await Employee.find({});
+    const filtered = all.filter(e => (e.employeeId || '').startsWith(prefix));
+    filtered.sort((a, b) => (b.employeeId || '').localeCompare(a.employeeId || ''));
 
     let nextNumber = 1;
-    if (lastEmployee) {
-      const match = lastEmployee.employeeId.match(/\d+$/);
+    if (filtered.length > 0) {
+      const lastEmployee = filtered[0];
+      const match = (lastEmployee.employeeId || '').match(/\d+$/);
       if (match) {
         nextNumber = parseInt(match[0], 10) + 1;
       }

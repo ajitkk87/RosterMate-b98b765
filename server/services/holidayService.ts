@@ -1,7 +1,6 @@
 import Holiday, { IHoliday, HolidayStatus } from '../models/Holiday';
 import Employee from '../models/Employee';
 import employeeService from './employeeService';
-import mongoose from 'mongoose';
 
 class HolidayService {
   /**
@@ -11,34 +10,36 @@ class HolidayService {
     status?: HolidayStatus;
     employeeId?: string;
   }): Promise<IHoliday[]> {
-    const query: Record<string, unknown> = {};
+    const query: Partial<IHoliday> = {};
+    if (filters?.status) query.status = filters.status;
+    if (filters?.employeeId) query.employeeId = filters.employeeId;
 
-    if (filters?.status) {
-      query.status = filters.status;
-    }
+    const holidays = await Holiday.find(query);
+    // populate employee and sort by createdAt desc
+    const populated = await Promise.all(
+      holidays.map(async h => {
+        const emp = await employeeService.getEmployeeById(h.employeeId);
+        return { ...h, employeeId: emp as any } as any;
+      })
+    );
 
-    if (filters?.employeeId) {
-      if (!mongoose.Types.ObjectId.isValid(filters.employeeId)) {
-        throw new Error('Invalid employee ID format');
-      }
-      query.employeeId = new mongoose.Types.ObjectId(filters.employeeId);
-    }
-
-    return await Holiday.find(query)
-      .populate('employeeId')
-      .sort({ createdAt: -1 });
+    return populated.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
   }
 
   /**
    * Get holidays for a specific employee
    */
   async getEmployeeHolidays(employeeId: string): Promise<IHoliday[]> {
-    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
+    if (!employeeId) {
       throw new Error('Invalid employee ID format');
     }
 
-    return await Holiday.find({ employeeId: new mongoose.Types.ObjectId(employeeId) })
-      .sort({ startDate: -1 });
+    const holidays = await Holiday.findByEmployeeId(employeeId);
+    const populated = await Promise.all(
+      holidays.map(async h => ({ ...h, employeeId: await employeeService.getEmployeeById(h.employeeId) } as any))
+    );
+
+    return populated.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
   }
 
   /**
@@ -50,129 +51,100 @@ class HolidayService {
     endDate: string;
     notes?: string;
   }): Promise<IHoliday> {
-    if (!mongoose.Types.ObjectId.isValid(data.employeeId)) {
+    if (!data.employeeId) {
       throw new Error('Invalid employee ID format');
     }
 
-    // Verify employee exists
     const employee = await employeeService.getEmployeeById(data.employeeId);
-    if (!employee) {
-      throw new Error('Employee not found');
-    }
+    if (!employee) throw new Error('Employee not found');
 
     const startDate = new Date(data.startDate);
     const endDate = new Date(data.endDate);
 
-    // Validate dates
-    if (startDate < new Date()) {
-      throw new Error('Start date cannot be in the past');
-    }
+    if (startDate < new Date()) throw new Error('Start date cannot be in the past');
+    if (endDate < startDate) throw new Error('End date must be after or equal to start date');
 
-    if (endDate < startDate) {
-      throw new Error('End date must be after or equal to start date');
-    }
-
-    // Check for overlapping holidays
-    const overlapping = await Holiday.findOne({
-      employeeId: new mongoose.Types.ObjectId(data.employeeId),
-      status: { $in: ['Pending', 'Approved'] },
-      $or: [
-        { startDate: { $lte: endDate }, endDate: { $gte: startDate } },
-      ],
+    const existing = await Holiday.findByEmployeeId(data.employeeId);
+    const overlapping = existing.find(h => {
+      if (!['Pending', 'Approved'].includes(h.status)) return false;
+      const hs = new Date(h.startDate);
+      const he = new Date(h.endDate);
+      return !(endDate < hs || startDate > he);
     });
 
-    if (overlapping) {
-      throw new Error('This holiday overlaps with an existing holiday request');
-    }
+    if (overlapping) throw new Error('This holiday overlaps with an existing holiday request');
 
-    // Calculate number of days
     const days = Math.ceil((endDate.getTime() - startDate.getTime()) / (1000 * 60 * 60 * 24)) + 1;
 
-    const holiday = new Holiday({
-      employeeId: new mongoose.Types.ObjectId(data.employeeId),
-      startDate,
-      endDate,
+    const holiday = await Holiday.create({
+      employeeId: data.employeeId,
+      startDate: startDate.toISOString(),
+      endDate: endDate.toISOString(),
       days,
       notes: data.notes,
       status: 'Pending',
     });
 
-    return await holiday.save();
+    return { ...holiday, employeeId: await employeeService.getEmployeeById(holiday.employeeId) } as any;
   }
 
   /**
    * Approve a holiday request
    */
   async approveHoliday(id: string): Promise<IHoliday | null> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new Error('Invalid holiday ID format');
-    }
+    if (!id) throw new Error('Invalid holiday ID format');
 
     const holiday = await Holiday.findById(id);
-    if (!holiday) {
-      throw new Error('Holiday not found');
-    }
+    if (!holiday) throw new Error('Holiday not found');
+    if (holiday.status !== 'Pending') throw new Error('Only pending holidays can be approved');
 
-    if (holiday.status !== 'Pending') {
-      throw new Error('Only pending holidays can be approved');
-    }
+    await Holiday.updateOne(id, { status: 'Approved' } as any);
 
-    holiday.status = 'Approved';
-    await holiday.save();
-
-    // Update employee status if holiday is current or upcoming
     const now = new Date();
-    if (holiday.startDate <= now && holiday.endDate >= now) {
-      await employeeService.updateEmployeeStatus(holiday.employeeId.toString(), 'On Holiday');
+    const hs = new Date(holiday.startDate);
+    const he = new Date(holiday.endDate);
+    if (hs <= now && he >= now) {
+      await employeeService.updateEmployeeStatus(holiday.employeeId, 'On Holiday');
     }
 
-    return await holiday.populate('employeeId');
+    const updated = await Holiday.findById(id);
+    return { ...updated, employeeId: await employeeService.getEmployeeById(updated!.employeeId) } as any;
   }
 
   /**
    * Reject a holiday request
    */
   async rejectHoliday(id: string): Promise<IHoliday | null> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new Error('Invalid holiday ID format');
-    }
+    if (!id) throw new Error('Invalid holiday ID format');
 
     const holiday = await Holiday.findById(id);
-    if (!holiday) {
-      throw new Error('Holiday not found');
-    }
+    if (!holiday) throw new Error('Holiday not found');
+    if (holiday.status !== 'Pending') throw new Error('Only pending holidays can be rejected');
 
-    if (holiday.status !== 'Pending') {
-      throw new Error('Only pending holidays can be rejected');
-    }
-
-    holiday.status = 'Rejected';
-    await holiday.save();
-
-    return await holiday.populate('employeeId');
+    await Holiday.updateOne(id, { status: 'Rejected' } as any);
+    const updated = await Holiday.findById(id);
+    return { ...updated, employeeId: await employeeService.getEmployeeById(updated!.employeeId) } as any;
   }
 
   /**
    * Get employee holiday balance (assuming 25 days per year)
    */
   async getEmployeeHolidayBalance(employeeId: string): Promise<number> {
-    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
-      throw new Error('Invalid employee ID format');
-    }
+    if (!employeeId) throw new Error('Invalid employee ID format');
 
     const currentYear = new Date().getFullYear();
     const yearStart = new Date(currentYear, 0, 1);
     const yearEnd = new Date(currentYear, 11, 31);
 
-    const approvedHolidays = await Holiday.find({
-      employeeId: new mongoose.Types.ObjectId(employeeId),
-      status: 'Approved',
-      startDate: { $gte: yearStart, $lte: yearEnd },
+    const all = await Holiday.findByEmployeeId(employeeId);
+    const approved = all.filter(h => h.status === 'Approved');
+    const inYear = approved.filter(h => {
+      const sd = new Date(h.startDate);
+      return sd >= yearStart && sd <= yearEnd;
     });
 
-    const usedDays = approvedHolidays.reduce((sum, holiday) => sum + holiday.days, 0);
-    const totalAllowance = 25; // Standard annual leave
-
+    const usedDays = inYear.reduce((sum, holiday) => sum + holiday.days, 0);
+    const totalAllowance = 25;
     return Math.max(0, totalAllowance - usedDays);
   }
 
@@ -180,18 +152,16 @@ class HolidayService {
    * Check if employee is on holiday during a specific date range
    */
   async isEmployeeOnHoliday(employeeId: string, startDate: Date, endDate: Date): Promise<boolean> {
-    if (!mongoose.Types.ObjectId.isValid(employeeId)) {
-      throw new Error('Invalid employee ID format');
-    }
+    if (!employeeId) throw new Error('Invalid employee ID format');
 
-    const holiday = await Holiday.findOne({
-      employeeId: new mongoose.Types.ObjectId(employeeId),
-      status: 'Approved',
-      startDate: { $lte: endDate },
-      endDate: { $gte: startDate },
+    const all = await Holiday.findByEmployeeId(employeeId);
+    const active = all.find(h => {
+      if (h.status !== 'Approved') return false;
+      const hs = new Date(h.startDate);
+      const he = new Date(h.endDate);
+      return !(endDate < hs || startDate > he);
     });
-
-    return holiday !== null;
+    return !!active;
   }
 
   /**
@@ -199,29 +169,23 @@ class HolidayService {
    */
   async updateEmployeeHolidayStatuses(): Promise<void> {
     const now = new Date();
+    const allApproved = await Holiday.find({ status: 'Approved' });
 
-    // Find all approved holidays that are currently active
-    const activeHolidays = await Holiday.find({
-      status: 'Approved',
-      startDate: { $lte: now },
-      endDate: { $gte: now },
+    const active = allApproved.filter(h => {
+      const hs = new Date(h.startDate);
+      const he = new Date(h.endDate);
+      return hs <= now && he >= now;
     });
 
-    // Set these employees as "On Holiday"
-    for (const holiday of activeHolidays) {
-      await employeeService.updateEmployeeStatus(holiday.employeeId.toString(), 'On Holiday');
+    for (const holiday of active) {
+      await employeeService.updateEmployeeStatus(holiday.employeeId, 'On Holiday');
     }
 
-    // Find employees whose holidays have ended
-    const endedHolidays = await Holiday.find({
-      status: 'Approved',
-      endDate: { $lt: now },
-    }).populate('employeeId');
-
-    for (const holiday of endedHolidays) {
-      const employee = holiday.employeeId as unknown as { _id: string; status: string };
-      if (employee.status === 'On Holiday') {
-        await employeeService.updateEmployeeStatus(employee._id.toString(), 'Available');
+    const ended = allApproved.filter(h => new Date(h.endDate) < now);
+    for (const holiday of ended) {
+      const emp = await employeeService.getEmployeeById(holiday.employeeId);
+      if (emp && emp.status === 'On Holiday') {
+        await employeeService.updateEmployeeStatus(emp._id as string, 'Available');
       }
     }
   }

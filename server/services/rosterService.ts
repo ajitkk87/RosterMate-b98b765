@@ -1,8 +1,8 @@
-import Roster, { IRoster, DutyType } from '../models/Roster';
+import { randomUUID } from 'crypto';
+import Roster, { IRoster, DutyType, IDutyAssignment } from '../models/Roster';
 import Employee from '../models/Employee';
 import employeeService from './employeeService';
 import holidayService from './holidayService';
-import mongoose from 'mongoose';
 
 class RosterService {
   /**
@@ -10,14 +10,19 @@ class RosterService {
    */
   async getRosterByWeek(weekStart: string): Promise<IRoster | null> {
     const weekStartDate = new Date(weekStart);
+    const weekStartStr = weekStartDate.toISOString().split('T')[0];
 
-    const roster = await Roster.findOne({ weekStartDate })
-      .populate({
-        path: 'assignments.employeeId',
-        model: 'Employee',
-      });
+    let roster = await Roster.findByWeekStartDate(weekStartStr);
+    if (!roster) return null;
 
-    return roster;
+    // parse assignments and populate employee data
+    const assignments: IDutyAssignment[] = JSON.parse((roster as any).assignments || '[]');
+    const populated = await Promise.all(assignments.map(async (a) => {
+      const emp = await Employee.findById(a.employeeId as string);
+      return { ...a, employee: emp } as any;
+    }));
+
+    return { ...roster, assignments: populated } as any;
   }
 
   /**
@@ -27,9 +32,10 @@ class RosterService {
     const weekStartDate = new Date(weekStart);
     const weekEndDate = new Date(weekStartDate);
     weekEndDate.setDate(weekEndDate.getDate() + 6);
+    const weekStartStr = weekStartDate.toISOString().split('T')[0];
 
     // Check if roster already exists for this week
-    const existingRoster = await Roster.findOne({ weekStartDate });
+    const existingRoster = await Roster.findByWeekStartDate(weekStartStr);
     if (existingRoster) {
       throw new Error('Roster already exists for this week. Please delete it first if you want to regenerate.');
     }
@@ -60,67 +66,33 @@ class RosterService {
     }
 
     // Sort developers by last duty date (those who haven't had duty recently get priority)
-    availableDevelopers.sort((a, b) => {
-      if (!a.lastDutyDate) return -1;
-      if (!b.lastDutyDate) return 1;
-      return a.lastDutyDate.getTime() - b.lastDutyDate.getTime();
-    });
+    const sortByLastDuty = (a:any, b:any) => {
+      const at = a.lastDutyDate ? new Date(a.lastDutyDate).getTime() : Number.NEGATIVE_INFINITY;
+      const bt = b.lastDutyDate ? new Date(b.lastDutyDate).getTime() : Number.NEGATIVE_INFINITY;
+      return at - bt;
+    };
 
-    availableOps.sort((a, b) => {
-      if (!a.lastDutyDate) return -1;
-      if (!b.lastDutyDate) return 1;
-      return a.lastDutyDate.getTime() - b.lastDutyDate.getTime();
-    });
-
-    availablePlatform.sort((a, b) => {
-      if (!a.lastDutyDate) return -1;
-      if (!b.lastDutyDate) return 1;
-      return a.lastDutyDate.getTime() - b.lastDutyDate.getTime();
-    });
+    availableDevelopers.sort(sortByLastDuty);
+    availableOps.sort(sortByLastDuty);
+    availablePlatform.sort(sortByLastDuty);
 
     // Assign duties
     const assignments = [
-      {
-        _id: new mongoose.Types.ObjectId(),
-        dutyType: 'Prod Duty - Developer' as DutyType,
-        employeeId: availableDevelopers[0]._id,
-      },
-      {
-        _id: new mongoose.Types.ObjectId(),
-        dutyType: 'Prod Duty - Developer' as DutyType,
-        employeeId: availableDevelopers[1]._id,
-      },
-      {
-        _id: new mongoose.Types.ObjectId(),
-        dutyType: 'Non-Prod Duty - Developer' as DutyType,
-        employeeId: availableDevelopers[2]._id,
-      },
-      {
-        _id: new mongoose.Types.ObjectId(),
-        dutyType: 'Non-Prod Duty - Developer' as DutyType,
-        employeeId: availableDevelopers[3]._id,
-      },
-      {
-        _id: new mongoose.Types.ObjectId(),
-        dutyType: 'Ops Duty' as DutyType,
-        employeeId: availableOps[0]._id,
-      },
-      {
-        _id: new mongoose.Types.ObjectId(),
-        dutyType: 'Platform Duty' as DutyType,
-        employeeId: availablePlatform[0]._id,
-      },
+      { _id: randomUUID(), dutyType: 'Prod Duty - Developer' as DutyType, employeeId: availableDevelopers[0]._id },
+      { _id: randomUUID(), dutyType: 'Prod Duty - Developer' as DutyType, employeeId: availableDevelopers[1]._id },
+      { _id: randomUUID(), dutyType: 'Non-Prod Duty - Developer' as DutyType, employeeId: availableDevelopers[2]._id },
+      { _id: randomUUID(), dutyType: 'Non-Prod Duty - Developer' as DutyType, employeeId: availableDevelopers[3]._id },
+      { _id: randomUUID(), dutyType: 'Ops Duty' as DutyType, employeeId: availableOps[0]._id },
+      { _id: randomUUID(), dutyType: 'Platform Duty' as DutyType, employeeId: availablePlatform[0]._id },
     ];
 
-    // Create roster
-    const roster = new Roster({
-      weekStartDate,
-      weekEndDate,
+    // Create roster using CSV-backed model
+    const roster = await Roster.create({
+      weekStartDate: weekStartStr,
+      weekEndDate: weekEndDate.toISOString().split('T')[0],
       assignments,
       createdBy,
-    });
-
-    await roster.save();
+    } as any);
 
     // Update last duty date and status for assigned employees
     for (const assignment of assignments) {
@@ -131,32 +103,30 @@ class RosterService {
     console.log(`Roster created successfully for week starting ${weekStart}`);
 
     // Populate and return
-    return await Roster.findById(roster._id).populate({
-      path: 'assignments.employeeId',
-      model: 'Employee',
-    }) as IRoster;
+    const created = await Roster.findById(roster._id as string);
+    const createdAssignments = JSON.parse((created as any).assignments || '[]');
+    const createdPopulated = await Promise.all(createdAssignments.map(async (a:any) => ({ ...a, employee: await Employee.findById(a.employeeId) })));
+    return { ...(created as any), assignments: createdPopulated } as any;
   }
 
   /**
    * Reassign a duty to a different employee
    */
   async reassignDuty(assignmentId: string, newEmployeeId: string): Promise<IRoster | null> {
-    if (!mongoose.Types.ObjectId.isValid(assignmentId)) {
-      throw new Error('Invalid assignment ID format');
-    }
-
-    if (!mongoose.Types.ObjectId.isValid(newEmployeeId)) {
-      throw new Error('Invalid employee ID format');
-    }
+    if (!assignmentId) throw new Error('Invalid assignment ID format');
+    if (!newEmployeeId) throw new Error('Invalid employee ID format');
 
     // Find roster containing this assignment
-    const roster = await Roster.findOne({ 'assignments._id': new mongoose.Types.ObjectId(assignmentId) });
+    // find roster containing this assignment by scanning all rosters
+    const all = await Roster.find();
+    const roster = all.find(r => {
+      const assigns = JSON.parse((r as any).assignments || '[]');
+      return assigns.some((a:any) => String(a._id) === String(assignmentId));
+    }) as any;
 
-    if (!roster) {
-      throw new Error('Assignment not found');
-    }
+    if (!roster) throw new Error('Assignment not found');
 
-    const assignment = roster.assignments.find(a => a._id.toString() === assignmentId);
+    const assignment = JSON.parse((roster as any).assignments || '[]').find((a:any) => String(a._id) === String(assignmentId));
     if (!assignment) {
       throw new Error('Assignment not found');
     }
@@ -176,8 +146,8 @@ class RosterService {
     // Check if new employee is on holiday
     const isOnHoliday = await holidayService.isEmployeeOnHoliday(
       newEmployeeId,
-      roster.weekStartDate,
-      roster.weekEndDate
+      new Date(roster.weekStartDate),
+      new Date(roster.weekEndDate)
     );
 
     if (isOnHoliday) {
@@ -187,24 +157,28 @@ class RosterService {
     const oldEmployeeId = assignment.employeeId;
 
     // Update assignment
-    assignment.employeeId = new mongoose.Types.ObjectId(newEmployeeId);
-    await roster.save();
+    // update assignment
+    const assignmentsArray = JSON.parse((roster as any).assignments || '[]');
+    const idx = assignmentsArray.findIndex((a:any) => String(a._id) === String(assignmentId));
+    assignmentsArray[idx].employeeId = newEmployeeId;
+    await Roster.updateOne(roster._id as string, { assignments: assignmentsArray } as any);
 
     // Update employee statuses
-    await employeeService.updateLastDutyDate(newEmployeeId, roster.weekStartDate);
+    await employeeService.updateLastDutyDate(newEmployeeId, new Date(roster.weekStartDate));
     await employeeService.updateEmployeeStatus(newEmployeeId, 'On Duty');
 
     // Check if old employee has any other duties in this roster
-    const hasOtherDuties = roster.assignments.some(
-      a => a._id.toString() !== assignmentId && a.employeeId.toString() === oldEmployeeId.toString()
+    const rosterAssignments = JSON.parse((roster as any).assignments || '[]');
+    const hasOtherDuties = rosterAssignments.some(
+      (a:any) => String(a._id) !== String(assignmentId) && String(a.employeeId) === String(oldEmployeeId)
     );
 
     if (!hasOtherDuties) {
       // Check if they're on holiday, otherwise set to available
       const isOldEmployeeOnHoliday = await holidayService.isEmployeeOnHoliday(
         oldEmployeeId.toString(),
-        roster.weekStartDate,
-        roster.weekEndDate
+        new Date(roster.weekStartDate),
+        new Date(roster.weekEndDate)
       );
 
       if (!isOldEmployeeOnHoliday) {
@@ -215,52 +189,46 @@ class RosterService {
     console.log(`Duty reassigned from ${oldEmployeeId} to ${newEmployeeId}`);
 
     // Return updated roster with populated employees
-    return await Roster.findById(roster._id).populate({
-      path: 'assignments.employeeId',
-      model: 'Employee',
-    });
+    const updated = await Roster.findById(roster._id as string);
+    const updatedAssignments = JSON.parse((updated as any).assignments || '[]');
+    const updatedPop = await Promise.all(updatedAssignments.map(async (a:any) => ({ ...a, employee: await Employee.findById(a.employeeId) })));
+    return { ...(updated as any), assignments: updatedPop } as any;
   }
 
   /**
    * Get roster history
    */
   async getRosterHistory(limit = 10): Promise<IRoster[]> {
-    return await Roster.find()
-      .sort({ weekStartDate: -1 })
-      .limit(limit)
-      .populate({
-        path: 'assignments.employeeId',
-        model: 'Employee',
-      });
+    const all = await Roster.find();
+    // sort by weekStartDate descending
+    all.sort((a:any,b:any) => (a.weekStartDate < b.weekStartDate ? 1 : -1));
+    const sliced = all.slice(0, limit);
+    // populate assignments
+    return await Promise.all(sliced.map(async (r:any) => {
+      const assigns = JSON.parse((r as any).assignments || '[]');
+      const pop = await Promise.all(assigns.map(async (a:any) => ({ ...a, employee: await Employee.findById(a.employeeId) })));
+      return { ...r, assignments: pop } as any;
+    }));
   }
 
   /**
    * Delete a roster
    */
   async deleteRoster(id: string): Promise<boolean> {
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      throw new Error('Invalid roster ID format');
-    }
+    if (!id) throw new Error('Invalid roster ID format');
 
     const roster = await Roster.findById(id);
-    if (!roster) {
-      return false;
-    }
+    if (!roster) return false;
 
-    // Update employee statuses back to available (if not on holiday)
-    for (const assignment of roster.assignments) {
-      const isOnHoliday = await holidayService.isEmployeeOnHoliday(
-        assignment.employeeId.toString(),
-        new Date(),
-        new Date()
-      );
-
+    const assignments = JSON.parse((roster as any).assignments || '[]');
+    for (const assignment of assignments) {
+      const isOnHoliday = await holidayService.isEmployeeOnHoliday(assignment.employeeId.toString(), new Date(), new Date());
       if (!isOnHoliday) {
         await employeeService.updateEmployeeStatus(assignment.employeeId.toString(), 'Available');
       }
     }
 
-    await Roster.findByIdAndDelete(id);
+    await Roster.deleteOne(id);
     return true;
   }
 
@@ -271,15 +239,8 @@ class RosterService {
     const available = [];
 
     for (const employee of employees) {
-      const isOnHoliday = await holidayService.isEmployeeOnHoliday(
-        employee._id.toString(),
-        startDate,
-        endDate
-      );
-
-      if (!isOnHoliday) {
-        available.push(employee);
-      }
+      const isOnHoliday = await holidayService.isEmployeeOnHoliday(employee._id.toString(), startDate, endDate);
+      if (!isOnHoliday) available.push(employee);
     }
 
     return available;

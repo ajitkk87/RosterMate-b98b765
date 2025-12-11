@@ -32,14 +32,17 @@ interface AuthConfigResponse {
   };
 }
 
-async function generateTokensAndReturnUser(user: User) {
-  const accessToken = generateAccessToken(user);
-  const refreshToken = generateRefreshToken(user);
+async function generateTokensAndReturnUser(user: any) {
+  const accessToken = generateAccessToken(user as any);
+  const refreshToken = generateRefreshToken(user as any);
 
-  user.refreshToken = refreshToken;
-  await user.save();
+  // Persist refresh token using CSV-backed model
+  if (user._id) {
+    await User.updateOne(user._id as string, { refreshToken } as any);
+  }
 
-  return { ...user.toObject(), accessToken, refreshToken };
+  const updatedUser = user._id ? await User.findById(user._id as string) : user;
+  return { ...(updatedUser as any), accessToken, refreshToken };
 }
 
 let oidcClient: Client | null = null;
@@ -111,7 +114,8 @@ if (AUTH_STRATEGY === 'pythagora_oauth') {
         return res.status(400).json({ message: 'Invalid claims in ID token' });
       }
 
-      let user = await User.findOne({ oauthId: claims.sub });
+      const foundUsers = await User.find({ oauthId: claims.sub });
+      let user = foundUsers && foundUsers.length ? foundUsers[0] : null;
       if (!user) {
         let email = claims.email;
 
@@ -128,11 +132,12 @@ if (AUTH_STRATEGY === 'pythagora_oauth') {
           return res.status(400).json({ message: 'No email found in user info' });
         }
 
-        user = await User.findOne({ email: email as string });
-        if (user) {
-          user.oauthProvider = 'pythagora';
-          user.oauthId = claims.sub;
-          await user.save();
+        const existing = await User.findByEmail(email as string);
+        if (existing) {
+          existing.oauthProvider = 'pythagora';
+          existing.oauthId = claims.sub;
+          await User.updateOne(existing._id as string, existing as any);
+          user = existing;
         } else {
           user = await User.create({
             email: email as string,
@@ -219,7 +224,7 @@ router.post('/refresh', async (req: Request, res: Response) => {
   try {
     const decoded = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET!) as jwt.JwtPayload;
 
-    const user = await UserService.get(decoded.sub);
+    const user = await User.findById(decoded.sub);
 
     if (!user) {
       return res.status(403).json({
@@ -238,13 +243,14 @@ router.post('/refresh', async (req: Request, res: Response) => {
     const newAccessToken = generateAccessToken(user);
     const newRefreshToken = generateRefreshToken(user);
 
-    user.refreshToken = newRefreshToken;
-    await user.save();
+    await User.updateOne(user._id as string, { refreshToken: newRefreshToken } as any);
+
+    const updatedUser = await User.findById(user._id as string);
 
     return res.status(200).json({
       success: true,
       data: {
-        ...user.toObject(),
+        ...updatedUser,
         accessToken: newAccessToken,
         refreshToken: newRefreshToken
       }

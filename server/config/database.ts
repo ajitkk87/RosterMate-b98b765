@@ -1,36 +1,25 @@
-import mongoose from 'mongoose';
 import dotenv from 'dotenv';
+import path from 'path';
+import CsvDatabase from '../utils/csv-db';
 
 dotenv.config();
 
+let csvDb: CsvDatabase;
+
 const connectDB = async (): Promise<void> => {
   try {
-    const conn = await mongoose.connect(process.env.DATABASE_URL!, {
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-    });
+    // Initialize CSV database with data directory from .env or default
+    const dataDir = process.env.CSV_DATA_DIR || path.join(process.cwd(), 'data');
+    csvDb = new CsvDatabase(dataDir);
 
-    console.log(`MongoDB Connected: ${conn.connection.host}`);
-
-    mongoose.connection.on('error', (err: Error) => {
-      console.error(`MongoDB connection error: ${err}`);
-    });
-
-    mongoose.connection.on('disconnected', () => {
-      console.warn('MongoDB disconnected. Attempting to reconnect...');
-    });
-
-    mongoose.connection.on('reconnected', () => {
-      console.info('MongoDB reconnected');
-    });
+    console.log(`CSV Database initialized at: ${dataDir}`);
 
     process.on('SIGINT', async () => {
       try {
-        await mongoose.connection.close();
-        console.log('MongoDB connection closed through app termination');
+        console.log('CSV database connection closed through app termination');
         process.exit(0);
       } catch (err) {
-        console.error('Error during MongoDB shutdown:', err);
+        console.error('Error during shutdown:', err);
         process.exit(1);
       }
     });
@@ -43,4 +32,5 @@ const connectDB = async (): Promise<void> => {
 
 export {
   connectDB,
+  csvDb,
 };

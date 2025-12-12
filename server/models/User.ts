@@ -1,13 +1,13 @@
-import mongoose, { Document, Schema } from 'mongoose';
-import { isPasswordHash } from '../utils/password';
 import { randomUUID } from 'crypto';
 import { ROLES, ALL_ROLES, RoleValues } from 'shared';
+import { csvDb } from '../config/database';
 
-export interface IUser extends Document {
+export interface IUser {
+  _id?: string;
   email: string;
   password: string | null;
-  createdAt: Date;
-  lastLoginAt: Date;
+  createdAt: string; // ISO string for CSV
+  lastLoginAt: string; // ISO string for CSV
   isActive: boolean;
   role: RoleValues;
   refreshToken: string;
@@ -15,72 +15,48 @@ export interface IUser extends Document {
   oauthId?: string;
 }
 
-const schema = new Schema<IUser>({
-  email: {
-    type: String,
-    required: true,
-    index: true,
-    unique: true,
-    lowercase: true,
-  },
-  password: {
-    type: String,
-    required: false,
-    validate: {
-      validator: function(v: string) {
-        if (!this.oauthProvider && !v) {
-          return false;
-        }
-        return v ? isPasswordHash(v) : true;
-      },
-      message: 'Invalid password hash'
-    },
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-    immutable: true,
-  },
-  lastLoginAt: {
-    type: Date,
-    default: Date.now,
-  },
-  isActive: {
-    type: Boolean,
-    default: true,
-  },
-  role: {
-    type: String,
-    enum: ALL_ROLES,
-    default: ROLES.USER,
-  },
-  refreshToken: {
-    type: String,
-    unique: true,
-    index: true,
-    default: () => randomUUID(),
-  },
-  oauthProvider: {
-    type: String,
-    required: false,
-  },
-  oauthId: {
-    type: String,
-    required: false,
-    index: true,
-    sparse: true,
-  },
-}, {
-  versionKey: false,
-});
+class UserModel {
+  private collection = 'users';
 
-schema.set('toJSON', {
-  transform: (doc: Document, ret: Record<string, unknown>) => {
-    delete ret.password;
-    return ret;
-  },
-});
+  async create(data: Omit<IUser, '_id' | 'createdAt' | 'refreshToken'>): Promise<IUser> {
+    const user: IUser = {
+      _id: randomUUID(),
+      ...data,
+      createdAt: new Date().toISOString(),
+      refreshToken: randomUUID(),
+    };
+    await csvDb.insertOne(this.collection, user as any);
+    return user;
+  }
 
-const User = mongoose.model<IUser>('User', schema);
+  async findById(id: string): Promise<IUser | null> {
+    return (await csvDb.findById(this.collection, id)) as IUser | null;
+  }
 
+  async findByEmail(email: string): Promise<IUser | null> {
+    return (await csvDb.findOne(this.collection, { email })) as IUser | null;
+  }
+
+  async findByRefreshToken(refreshToken: string): Promise<IUser | null> {
+    return (await csvDb.findOne(this.collection, { refreshToken })) as IUser | null;
+  }
+
+  async find(filter?: Partial<IUser>): Promise<IUser[]> {
+    return (await csvDb.find(this.collection, filter)) as IUser[];
+  }
+
+  async updateOne(id: string, update: Partial<IUser>): Promise<IUser | null> {
+    return (await csvDb.updateOne(this.collection, id, update as any)) as IUser | null;
+  }
+
+  async deleteOne(id: string): Promise<boolean> {
+    return csvDb.deleteOne(this.collection, id);
+  }
+
+  async countDocuments(filter?: Partial<IUser>): Promise<number> {
+    return csvDb.countDocuments(this.collection, filter);
+  }
+}
+
+const User = new UserModel();
 export default User;

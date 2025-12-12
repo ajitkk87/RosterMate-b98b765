@@ -8,7 +8,22 @@ const localApi = axios.create({
   validateStatus: (status) => {
     return status >= 200 && status < 300;
   },
-  transformResponse: [(data) => JSONbig.parse(data)]
+  transformResponse: [
+    (data) => {
+      // Some responses (e.g. 204 No Content) return an empty body which would
+      // cause JSON parsing to throw. Return null/empty data as-is in that case.
+      if (data === null || data === undefined || data === '') return data;
+      try {
+        return JSONbig.parse(data);
+      } catch (err) {
+        // If parsing fails, log and return the raw data to avoid unhandled exceptions
+        // downstream. The caller can handle unexpected formats as needed.
+        // eslint-disable-next-line no-console
+        console.warn('Failed to parse JSON response, returning raw data:', err);
+        return data;
+      }
+    }
+  ]
 });
 
 let accessToken: string | null = null;
@@ -35,55 +50,7 @@ const setupInterceptors = (apiInstance: typeof axios) => {
 
   apiInstance.interceptors.response.use(
     (response) => response,
-    async (error: AxiosError): Promise<unknown> => {
-      const originalRequest = error.config as InternalAxiosRequestConfig & { _retry?: boolean };
-
-      // Only refresh token when we get a 401/403 error (token is invalid/expired)
-      if (error.response?.status && [401, 403].includes(error.response.status) &&
-          !originalRequest._retry &&
-          originalRequest.url && !isRefreshTokenEndpoint(originalRequest.url)) {
-        originalRequest._retry = true;
-
-        try {
-          const refreshToken = localStorage.getItem('refreshToken');
-          if (!refreshToken) {
-            throw new Error('No refresh token available');
-          }
-
-          const response = await localApi.post(`/api/auth/refresh`, {
-            refreshToken,
-          });
-
-          if (response.data.data) {
-            const newAccessToken = response.data.data.accessToken;
-            const newRefreshToken = response.data.data.refreshToken;
-
-            localStorage.setItem('accessToken', newAccessToken);
-            localStorage.setItem('refreshToken', newRefreshToken);
-            accessToken = newAccessToken;
-
-            if (originalRequest.headers) {
-              originalRequest.headers.Authorization = `Bearer ${newAccessToken}`;
-            }
-          } else {
-            throw new Error('Invalid response from refresh token endpoint');
-          }
-
-          if (originalRequest.headers) {
-            originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-          }
-          return localApi;
-        } catch (err) {
-          localStorage.removeItem('refreshToken');
-          localStorage.removeItem('accessToken');
-          accessToken = null;
-          window.location.href = '/login';
-          return Promise.reject(err);
-        }
-      }
-
-      return Promise.reject(error);
-    }
+    (error: AxiosError): Promise<AxiosError> => Promise.reject(error)
   );
 };
 

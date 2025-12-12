@@ -1,0 +1,3 @@
+nohup: ignoring input
+Log server listening on 4444
+Received /logs: {"msg":"hello-from-assistant"}

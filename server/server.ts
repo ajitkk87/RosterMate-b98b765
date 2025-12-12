@@ -12,11 +12,6 @@ import cors from 'cors';
 // Load environment variables
 dotenv.config();
 
-if (!process.env.DATABASE_URL) {
-  console.error("Error: DATABASE_URL variables in .env missing.");
-  process.exit(-1);
-}
-
 const app = express();
 const port = process.env.PORT || 3000;
 

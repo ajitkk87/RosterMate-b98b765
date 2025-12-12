@@ -4,7 +4,7 @@ import Employee from '../models/Employee';
 import User from '../models/User';
 import { generatePasswordHash } from '../utils/password';
 import { ROLES } from 'shared';
-import mongoose from 'mongoose';
+// No mongoose required when using CSV-backed storage
 
 dotenv.config();
 
@@ -82,13 +82,13 @@ async function seedDatabase() {
 
         const employeeId = `${prefix}${String(count).padStart(3, '0')}`;
 
-        return new Employee({
+        return Employee.create({
           name: emp.name,
           email: emp.email,
           department: emp.department,
           employeeId,
           status: 'Available',
-        }).save();
+        });
       });
 
       await Promise.all(employeePromises);
@@ -96,42 +96,38 @@ async function seedDatabase() {
     }
 
     // Check if admin user exists
-    const existingAdmin = await User.findOne({ email: 'admin@rostermate.com' });
+    const existingAdmin = await User.findByEmail('admin@rostermate.com');
     if (existingAdmin) {
       console.log('Admin user already exists. Skipping admin user creation.');
     } else {
       console.log('Creating admin user...');
 
       const adminPassword = await generatePasswordHash('admin123');
-      const adminUser = new User({
+      await User.create({
         email: 'admin@rostermate.com',
         password: adminPassword,
         role: ROLES.ADMIN,
         isActive: true,
       });
-
-      await adminUser.save();
       console.log('✓ Admin user created successfully');
       console.log('  Email: admin@rostermate.com');
       console.log('  Password: admin123');
     }
 
     // Check if regular user exists
-    const existingUser = await User.findOne({ email: 'user@rostermate.com' });
+    const existingUser = await User.findByEmail('user@rostermate.com');
     if (existingUser) {
       console.log('Regular user already exists. Skipping regular user creation.');
     } else {
       console.log('Creating regular user...');
 
       const userPassword = await generatePasswordHash('user123');
-      const regularUser = new User({
+      await User.create({
         email: 'user@rostermate.com',
         password: userPassword,
         role: ROLES.USER,
         isActive: true,
       });
-
-      await regularUser.save();
       console.log('✓ Regular user created successfully');
       console.log('  Email: user@rostermate.com');
       console.log('  Password: user123');

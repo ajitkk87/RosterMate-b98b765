@@ -88,6 +88,12 @@ rostermate/
    mongod
    ```
 
+   Note: If Docker is not available in your environment (for example inside some devcontainers), start a local `mongod` service or use MongoDB Atlas and set `DATABASE_URL` in `server/.env` to your Atlas URI. A `docker-compose.yml` is included for convenience when Docker is available.
+
+   Example Atlas URI (replace placeholders):
+
+   `mongodb+srv://<username>:<password>@cluster0.mongodb.net/rostermate?retryWrites=true&w=majority`
+
 5. **Seed the database**
    ```bash
    cd server
